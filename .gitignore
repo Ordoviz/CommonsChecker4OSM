@@ -1,6 +1,2 @@
-commonscats-in-commons.txt
-commonscats-in-osm.xml
-*.gz
-*.geojson
-*.tsv
-*.pbf
+data/*
+out/*

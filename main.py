@@ -1,60 +1,64 @@
 #!/usr/bin/env python3
-import xml.etree.ElementTree as ET
-import gzip
 import sys
 import json
 
-VALID_CATS = "commonscats-in-commons.txt"
+class InvalidCommonsTagDetector:
+    def __init__(self, prefix, keyfile):
+        self.prefix = prefix
+        with open(keyfile) as f:
+            self.titles = {line for line in f}
 
-def load_valid_categories():
-    cats = set()
-    try:
-        with open(VALID_CATS) as f:
-            for line in f:
-                cats.add(line.rstrip('\n'))
-    except FileNotFoundError:
-        with gzip.open("commonswiki-latest-all-titles.gz", "rt") as f_in, open(VALID_CATS, "w") as f_out:
-            for line in f_in:
-                ns, category_name = line.split('\t', 1)
-                if ns == '14': # "Category:" namespace
-                    cats.add(category_name.rstrip('\n'))
-                    f_out.write(category_name)
-    return cats
+    def detect(self, str):
+        return (str.startswith(self.prefix) and
+                str.removeprefix(self.prefix).replace(' ', '_') not in self.titles)
 
 
-def tsv(cats, outfile):
-    with open(outfile, "w") as f:
-        tree = ET.parse("commonscats-in-osm.xml")
-        for elem in tree.findall(".//*tag[@k='wikimedia_commons']/.."):
-            wikimedia_commons = elem.find("tag[@k='wikimedia_commons']").get('v').removeprefix("Category:")
-            if wikimedia_commons.replace(' ', '_') not in cats:
-                f.write(f"{elem.tag[:1]}/{elem.get('id')}\t{wikimedia_commons}\n")
+def print_tsv(detector: InvalidCommonsTagDetector, tsvfile):
+    for line in open(tsvfile, "r"):
+        fields = line.split('\t')
+        if len(fields) != 2:
+            sys.stderr.write("malformed input line: " + line)
+            continue
+        if detector.detect(fields[1]):
+            sys.stdout.write(line)
 
 
-def geojson(cats, outfile):
-    with open(outfile, "wb") as f:
-        for line in open("planet-filtered.geojson", "rb"):
-            wikimedia_commons = json.loads(line[1:])["properties"]["wikimedia_commons"]
-            if wikimedia_commons.removeprefix("Category:").replace(' ', '_') not in cats:
-                f.write(line)
+def print_geojson(detector: InvalidCommonsTagDetector, geojsonfile):
+    for line in open(geojsonfile, "rb"):
+        if detector.detect(json.loads(line[1:])["properties"]["wikimedia_commons"] + '\n'):
+            # MapRoulette-friendly output format:
+            sys.stdout.buffer.write(b'\x1e{"type":"FeatureCollection","features":[%s]}\n'
+                    % line[1:].rstrip(b'\n'))
 
 
 def usage():
-    print("""Usage: ./main.py outfile.geojson
-       ./main.py outfile.tsv""",
+    print("""Usage: ./main.py <prefix> <keyfile> <osmfile>
+
+Arguments:
+  <prefix>: namespace prefix (e.g. "Category:" or "File:")
+  <keyfile>:  list of MediaWiki page titles (one per line)
+  <osmfile>:  .tsv or .geojson file generated with make
+
+Example:
+   ./main.py Category: data/commonswiki-cats.txt data/planet-filtered.tsv""",
         file=sys.stderr)
     exit(1)
 
 
 def main():
-    if len(sys.argv) != 2:
+    if len(sys.argv) != 4:
         usage()
 
-    outfile = sys.argv[1]
-    if outfile.endswith(".tsv"):
-        tsv(load_valid_categories(), outfile)
-    elif outfile.endswith(".geojson"):
-        geojson(load_valid_categories(), outfile)
+    prefix = sys.argv[1]
+    keyfile = sys.argv[2]
+    osmfile = sys.argv[3]
+
+    if osmfile.endswith(".tsv"):
+        detector = InvalidCommonsTagDetector(prefix, keyfile)
+        print_tsv(detector, osmfile)
+    elif osmfile.endswith(".geojson"):
+        detector = InvalidCommonsTagDetector(prefix, keyfile)
+        print_geojson(detector, osmfile)
     else:
         usage()
 
