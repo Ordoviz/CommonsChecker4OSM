@@ -24,7 +24,7 @@ data/commonswiki-files.txt.gz: FORCE
 	curl -z data/commonswiki-files.txt.gz https://dumps.wikimedia.org/other/mediatitles/$(yesterday)/commonswiki-$(yesterday)-all-media-titles.gz -o data/commonswiki-files.txt.gz
 
 data/commonswiki-files.txt: data/commonswiki-files.txt.gz
-	gunzip --keep data/commonswiki-files.txt.gz
+	gunzip --force --keep data/commonswiki-files.txt.gz
 
 data/planet-filtered.tsv: data/planet.pbf
 	osmium tags-filter -R data/planet.pbf 'nwr/wikimedia_commons' -f xml | ./xml2tsv.py > data/planet-filtered.tsv
@@ -45,9 +45,9 @@ out/cats.geojson: main data/commonswiki-cats.txt data/planet-filtered.geojson
 	./main Category: $$(wc -l data/commonswiki-cats.txt) data/planet-filtered.geojson $$(nproc) > out/cats.geojson
 
 out/files.tsv: main data/commonswiki-files.txt data/planet-filtered.tsv
-	./main File: $$(wc -l data/commonswiki-files.txt) data/planet-filtered.tsv $$(nproc) > out/files.tsv
+	./main File: $$(wc -l data/commonswiki-files.txt) data/planet-filtered.tsv $$(nproc) | grep -Fv ';File:' > out/files.tsv
 
 out/files.geojson: main data/commonswiki-files.txt data/planet-filtered.geojson
-	./main File: $$(wc -l data/commonswiki-files.txt) data/planet-filtered.geojson $$(nproc) > out/files.geojson
+	./main File: $$(wc -l data/commonswiki-files.txt) data/planet-filtered.geojson $$(nproc) | grep -Fv ';File:' > out/files.geojson
 
 FORCE: ;
